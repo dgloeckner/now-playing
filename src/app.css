@@ -1,0 +1,44 @@
+/* Kiosk base: a full-screen, dark, non-interactive display surface. */
+
+:root {
+  color-scheme: dark;
+  --bg: #000;
+  --text: #fff;
+  --text-dim: rgba(255, 255, 255, 0.55);
+  --sans: -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+html,
+body {
+  /* Lock the kiosk: no scroll, no rubber-banding, no text selection, no tap flash. */
+  overflow: hidden;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  /* svh tracks the visible viewport even with Safari's dynamic chrome. */
+  height: 100svh;
+  display: flex;
+}
