@@ -1,6 +1,6 @@
 # Party DJ Mode (display-mode shell)
 
-Status: ready-for-agent
+Status: done
 Type: AFK
 
 ## What to build
@@ -20,3 +20,16 @@ Establish a small structure so the display can render one Display Mode at a time
 ## Blocked by
 
 - #03 Render Now Playing
+
+## Comments
+
+**Completed (TDD).** Default mode is `minimal`; tapping the screen cycles to `party-dj` (display concern, not playback control — ADR-0002 intact).
+
+- `src/lib/display/color.ts` — `dominantColor(pixels)`: quantized-histogram dominant color from RGBA data, for the album-art color wash.
+- `src/lib/display/displayMode.ts` — Display Mode abstraction as pure functions: `MODE_IDS`/`DEFAULT_MODE_ID`, `nextModeId` (cycle+wrap), `loadModeId`/`saveModeId` (persist, ignore unknown stored values).
+- `src/PartyDjMode.svelte` — immersive treatment of the playing track: animated album-art color wash + blurred pulsing backdrop + glow, bold type; extracts the accent via canvas + `dominantColor` with a CORS-safe fallback; honors `prefers-reduced-motion`.
+- `src/App.svelte` — renders `NowPlaying` (minimal) or `PartyDjMode` (party-dj) by mode id; transparent full-screen `<button>` overlay cycles the mode (keyboard-accessible).
+
+Tests: **38 total** (4 new) — dominantColor, mode default/unknown fallback, cycle+wrap, save→load round-trip.
+
+Verified: `npm test` 38/38, `npm run check` 0 errors/0 warnings, `npm run build` succeeds. Real-browser smoke (Playwright): starts minimal → tap switches to Party DJ → persists across reload → tap returns to minimal; exactly one mode rendered at a time; no page errors. Only #06 (PWA install & keep-awake) remains.

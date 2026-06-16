@@ -3,14 +3,24 @@
   import { createBrowserSpotifyAuth } from './lib/auth/browser'
   import { createNowPlayingPoller } from './lib/playback/poller'
   import type { PlaybackState, Track } from './lib/playback/playback'
+  import { loadModeId, nextModeId, saveModeId } from './lib/display/displayMode'
   import NowPlaying from './NowPlaying.svelte'
   import ComingUp from './ComingUp.svelte'
+  import PartyDjMode from './PartyDjMode.svelte'
 
   const auth = createBrowserSpotifyAuth()
   let status = $state(auth.getStatus())
   let error = $state<string | null>(null)
   let playback = $state<PlaybackState>({ status: 'idle' })
   let comingUp = $state<Track[]>([])
+  let modeId = $state(loadModeId(window.localStorage))
+
+  // Tapping the display cycles the Display Mode (a display concern, not playback
+  // control — ADR-0002 stays intact).
+  function cycleMode() {
+    modeId = nextModeId(modeId)
+    saveModeId(window.localStorage, modeId)
+  }
 
   // While connected, poll Spotify and feed the latest state to the display.
   $effect(() => {
@@ -59,8 +69,14 @@
 
 {#if status === 'connected'}
   <main class="display display--connected">
-    <NowPlaying {playback} />
+    {#if modeId === 'party-dj'}
+      <PartyDjMode {playback} />
+    {:else}
+      <NowPlaying {playback} />
+    {/if}
     <ComingUp tracks={comingUp} />
+    <!-- Full-screen tap target to cycle the Display Mode. -->
+    <button class="mode-toggle" aria-label="Change display mode" onclick={cycleMode}></button>
   </main>
 {:else}
   <main class="display">
@@ -87,10 +103,23 @@
 
   /* Connected: Now Playing fills the upper area, Coming Up sits below it. */
   .display--connected {
+    position: relative;
     flex-direction: column;
     align-items: stretch;
     justify-content: stretch;
     padding: 0 0 4vmin;
+  }
+
+  /* Transparent overlay: tap (or Enter/Space) anywhere to cycle Display Mode. */
+  .mode-toggle {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    appearance: none;
   }
 
   .placeholder h1 {
