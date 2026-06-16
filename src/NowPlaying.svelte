@@ -64,9 +64,10 @@
     justify-content: center;
     gap: 3vmin;
     overflow: hidden;
-    padding: 4vmin;
+    /* Extra bottom room so the progress bar isn't flush against Coming Up. */
+    padding: 4vmin 4vmin 8vmin;
     /* Art is capped so a 2-line title + artist + progress always fit. */
-    --size: min(44vh, 80vw);
+    --size: min(42vh, 80vw);
   }
 
   /* Blurred, dimmed album art as an ambient backdrop. */
