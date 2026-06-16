@@ -4,6 +4,7 @@
   import { createNowPlayingPoller } from './lib/playback/poller'
   import type { PlaybackState, Track } from './lib/playback/playback'
   import { loadModeId, nextModeId, saveModeId } from './lib/display/displayMode'
+  import { createBrowserWakeLock } from './lib/display/wakeLockBrowser'
   import NowPlaying from './NowPlaying.svelte'
   import ComingUp from './ComingUp.svelte'
   import PartyDjMode from './PartyDjMode.svelte'
@@ -14,6 +15,13 @@
   let playback = $state<PlaybackState>({ status: 'idle' })
   let comingUp = $state<Track[]>([])
   let modeId = $state(loadModeId(window.localStorage))
+
+  // Keep the screen awake the whole time the kiosk is open.
+  $effect(() => {
+    const wakeLock = createBrowserWakeLock()
+    void wakeLock.start()
+    return () => void wakeLock.stop()
+  })
 
   // Tapping the display cycles the Display Mode (a display concern, not playback
   // control — ADR-0002 stays intact).
