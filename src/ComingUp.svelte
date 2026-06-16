@@ -32,6 +32,7 @@
     width: 100%;
     max-width: min(55vh, 80vw);
     margin: 0 auto;
+    padding-top: 3vmin;
   }
 
   .label {
