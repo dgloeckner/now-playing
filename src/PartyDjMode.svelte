@@ -101,9 +101,11 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4vmin;
+    gap: 3vmin;
     overflow: hidden;
-    padding: 6vmin;
+    padding: 4vmin;
+    /* Art is capped so a 2-line title + artist + progress always fit. */
+    --size: min(44vh, 82vw);
   }
 
   /* Animated color wash derived from the album art. */
@@ -150,7 +152,7 @@
   .art {
     position: relative;
     z-index: 1;
-    width: min(58vh, 82vw);
+    width: var(--size);
     aspect-ratio: 1;
     object-fit: cover;
     border-radius: 2vmin;
@@ -172,7 +174,7 @@
   .meta {
     position: relative;
     z-index: 1;
-    width: min(58vh, 82vw);
+    width: var(--size);
     text-align: center;
   }
 
@@ -181,9 +183,13 @@
     font-weight: 800;
     letter-spacing: -0.02em;
     margin: 0 0 0.2em;
-    white-space: nowrap;
+    /* Wrap to at most two lines; ellipsis only if it still overflows. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
     text-shadow: 0 0.4vmin 2vmin rgba(0, 0, 0, 0.6);
   }
 
