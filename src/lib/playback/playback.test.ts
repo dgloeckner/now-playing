@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { parsePlayback, interpolateProgress, fetchPlayback, nextPollDelay } from './playback'
+import {
+  parsePlayback,
+  interpolateProgress,
+  fetchPlayback,
+  nextPollDelay,
+  parseComingUp,
+  fetchComingUp,
+} from './playback'
 import type { PlaybackState } from './playback'
 
 function res(status: number, opts: { json?: unknown; retryAfter?: string } = {}): Response {
@@ -117,6 +124,95 @@ describe('fetchPlayback', () => {
       throw new Error('network down')
     }) as unknown as typeof fetch
     expect(await fetchPlayback('TOKEN', fetchFn, 1_000)).toEqual({ kind: 'error' })
+  })
+})
+
+describe('parseComingUp', () => {
+  const queueBody = {
+    currently_playing: { name: 'ignored' },
+    queue: [
+      {
+        name: 'Next One',
+        duration_ms: 180_000,
+        artists: [{ name: 'Artist A' }],
+        album: { images: [{ url: 'https://q/640', width: 640 }, { url: 'https://q/64', width: 64 }] },
+      },
+      {
+        name: 'Next Two',
+        duration_ms: 200_000,
+        artists: [{ name: 'Artist B' }, { name: 'Artist C' }],
+        album: { images: [] },
+      },
+    ],
+  }
+
+  it('maps queue items to upcoming tracks', () => {
+    expect(parseComingUp(queueBody, 3)).toEqual([
+      { title: 'Next One', artist: 'Artist A', albumArtUrl: 'https://q/640', durationMs: 180_000 },
+      { title: 'Next Two', artist: 'Artist B, Artist C', albumArtUrl: null, durationMs: 200_000 },
+    ])
+  })
+
+  it('caps the result at the given limit', () => {
+    const body = {
+      queue: Array.from({ length: 5 }, (_, i) => ({
+        name: `T${i}`,
+        duration_ms: 1_000,
+        artists: [{ name: 'A' }],
+        album: { images: [] },
+      })),
+    }
+    const tracks = parseComingUp(body, 3)
+    expect(tracks).toHaveLength(3)
+    expect(tracks.map((t) => t.title)).toEqual(['T0', 'T1', 'T2'])
+  })
+
+  it('returns an empty list when the queue is empty or missing', () => {
+    expect(parseComingUp({ queue: [] }, 3)).toEqual([])
+    expect(parseComingUp({}, 3)).toEqual([])
+  })
+})
+
+describe('fetchComingUp', () => {
+  const queueResponse = {
+    queue: [{ name: 'Q1', duration_ms: 1_000, artists: [{ name: 'A' }], album: { images: [] } }],
+  }
+
+  it('maps 200 to upcoming tracks and sends the bearer token', async () => {
+    let captured: { url: string; init: RequestInit } | undefined
+    const fetchFn = (async (url: string, init: RequestInit) => {
+      captured = { url: String(url), init }
+      return res(200, { json: queueResponse })
+    }) as unknown as typeof fetch
+
+    expect(await fetchComingUp('TOKEN', fetchFn, 3)).toEqual({
+      kind: 'tracks',
+      tracks: [{ title: 'Q1', artist: 'A', albumArtUrl: null, durationMs: 1_000 }],
+    })
+    expect(captured!.url).toBe('https://api.spotify.com/v1/me/player/queue')
+    expect((captured!.init.headers as Record<string, string>).Authorization).toBe('Bearer TOKEN')
+  })
+
+  it('maps 204 No Content to an empty Coming Up', async () => {
+    const fetchFn = (async () => res(204)) as unknown as typeof fetch
+    expect(await fetchComingUp('TOKEN', fetchFn, 3)).toEqual({ kind: 'tracks', tracks: [] })
+  })
+
+  it('maps 429 to rate-limited via Retry-After', async () => {
+    const fetchFn = (async () => res(429, { retryAfter: '2' })) as unknown as typeof fetch
+    expect(await fetchComingUp('TOKEN', fetchFn, 3)).toEqual({
+      kind: 'rateLimited',
+      retryAfterMs: 2_000,
+    })
+  })
+
+  it('maps other statuses and network failures to error', async () => {
+    const server = (async () => res(500)) as unknown as typeof fetch
+    expect(await fetchComingUp('TOKEN', server, 3)).toEqual({ kind: 'error' })
+    const network = (async () => {
+      throw new Error('down')
+    }) as unknown as typeof fetch
+    expect(await fetchComingUp('TOKEN', network, 3)).toEqual({ kind: 'error' })
   })
 })
 

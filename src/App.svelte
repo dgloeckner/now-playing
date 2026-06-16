@@ -2,13 +2,15 @@
   // Auth (issue 02) + Now Playing display (issue 03).
   import { createBrowserSpotifyAuth } from './lib/auth/browser'
   import { createNowPlayingPoller } from './lib/playback/poller'
-  import type { PlaybackState } from './lib/playback/playback'
+  import type { PlaybackState, Track } from './lib/playback/playback'
   import NowPlaying from './NowPlaying.svelte'
+  import ComingUp from './ComingUp.svelte'
 
   const auth = createBrowserSpotifyAuth()
   let status = $state(auth.getStatus())
   let error = $state<string | null>(null)
   let playback = $state<PlaybackState>({ status: 'idle' })
+  let comingUp = $state<Track[]>([])
 
   // While connected, poll Spotify and feed the latest state to the display.
   $effect(() => {
@@ -20,6 +22,10 @@
       onState: (s) => {
         playback = s
       },
+      onComingUp: (tracks) => {
+        comingUp = tracks
+      },
+      comingUpLimit: 3,
     })
     poller.start()
     return () => poller.stop()
@@ -51,10 +57,13 @@
   }
 </script>
 
-<main class="display">
-  {#if status === 'connected'}
+{#if status === 'connected'}
+  <main class="display display--connected">
     <NowPlaying {playback} />
-  {:else}
+    <ComingUp tracks={comingUp} />
+  </main>
+{:else}
+  <main class="display">
     <section class="placeholder">
       <h1>Now Playing</h1>
       <p>Not connected to Spotify yet.</p>
@@ -63,8 +72,8 @@
       {/if}
       <button class="connect" onclick={connect}>Connect Spotify</button>
     </section>
-  {/if}
-</main>
+  </main>
+{/if}
 
 <style>
   .display {
@@ -74,6 +83,14 @@
     justify-content: center;
     text-align: center;
     padding: 5vmin;
+  }
+
+  /* Connected: Now Playing fills the upper area, Coming Up sits below it. */
+  .display--connected {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0 0 4vmin;
   }
 
   .placeholder h1 {

@@ -18,7 +18,14 @@ export type PollOutcome =
   | { kind: 'rateLimited'; retryAfterMs: number }
   | { kind: 'error' }
 
+/** The result of one queue poll: fresh tracks, a rate-limit signal, or a failure. */
+export type ComingUpOutcome =
+  | { kind: 'tracks'; tracks: Track[] }
+  | { kind: 'rateLimited'; retryAfterMs: number }
+  | { kind: 'error' }
+
 const CURRENTLY_PLAYING_ENDPOINT = 'https://api.spotify.com/v1/me/player/currently-playing'
+const QUEUE_ENDPOINT = 'https://api.spotify.com/v1/me/player/queue'
 const ERROR_BACKOFF_MS = 5_000
 
 /** How long to wait before the next poll, given the last outcome. */
@@ -51,25 +58,35 @@ function largestImageUrl(images: SpotifyImage[]): string | null {
   return images.reduce((best, img) => (img.width > best.width ? img : best)).url
 }
 
-/**
- * Poll Spotify's currently-playing endpoint once and classify the response.
- * Rate-limit and transient errors are returned as outcomes, never thrown, so
- * the polling loop can decide how long to wait (ADR-0003).
- */
-export async function fetchPlayback(
+function parseTrack(item: SpotifyItem): Track {
+  return {
+    title: item.name,
+    artist: item.artists.map((a) => a.name).join(', '),
+    albumArtUrl: largestImageUrl(item.album.images),
+    durationMs: item.duration_ms,
+  }
+}
+
+// Shared HTTP envelope for authenticated Spotify GETs. Rate-limit and transient
+// errors become results, never throws, so the polling loop can decide how long
+// to wait (ADR-0003).
+type HttpResult =
+  | { kind: 'ok'; json: unknown }
+  | { kind: 'noContent' }
+  | { kind: 'rateLimited'; retryAfterMs: number }
+  | { kind: 'error' }
+
+async function requestSpotify(
+  endpoint: string,
   accessToken: string,
   fetchFn: typeof fetch,
-  now: number,
-): Promise<PollOutcome> {
+): Promise<HttpResult> {
   try {
-    const res = await fetchFn(CURRENTLY_PLAYING_ENDPOINT, {
+    const res = await fetchFn(endpoint, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-
-    if (res.status === 204) return { kind: 'state', state: { status: 'idle' } }
-    if (res.status === 200) {
-      return { kind: 'state', state: parsePlayback(await res.json(), now) }
-    }
+    if (res.status === 204) return { kind: 'noContent' }
+    if (res.status === 200) return { kind: 'ok', json: await res.json() }
     if (res.status === 429) {
       const retryAfterSec = Number(res.headers.get('Retry-After') ?? '1')
       return { kind: 'rateLimited', retryAfterMs: retryAfterSec * 1000 }
@@ -77,6 +94,25 @@ export async function fetchPlayback(
     return { kind: 'error' }
   } catch {
     return { kind: 'error' }
+  }
+}
+
+/** Poll Spotify's currently-playing endpoint once and classify the response. */
+export async function fetchPlayback(
+  accessToken: string,
+  fetchFn: typeof fetch,
+  now: number,
+): Promise<PollOutcome> {
+  const result = await requestSpotify(CURRENTLY_PLAYING_ENDPOINT, accessToken, fetchFn)
+  switch (result.kind) {
+    case 'noContent':
+      return { kind: 'state', state: { status: 'idle' } }
+    case 'ok':
+      return { kind: 'state', state: parsePlayback(result.json, now) }
+    case 'rateLimited':
+      return { kind: 'rateLimited', retryAfterMs: result.retryAfterMs }
+    case 'error':
+      return { kind: 'error' }
   }
 }
 
@@ -92,6 +128,35 @@ export function interpolateProgress(state: PlaybackState, now: number): number {
   return Math.min(state.track.durationMs, Math.max(0, state.progressMs + elapsed))
 }
 
+interface QueueBody {
+  queue?: SpotifyItem[]
+}
+
+/** The upcoming tracks ("Coming Up"), parsed from the Spotify queue response. */
+export function parseComingUp(body: unknown, limit: number): Track[] {
+  const data = body as QueueBody
+  return (data.queue ?? []).slice(0, limit).map(parseTrack)
+}
+
+/** Poll Spotify's queue endpoint once and classify the response (cf. fetchPlayback). */
+export async function fetchComingUp(
+  accessToken: string,
+  fetchFn: typeof fetch,
+  limit: number,
+): Promise<ComingUpOutcome> {
+  const result = await requestSpotify(QUEUE_ENDPOINT, accessToken, fetchFn)
+  switch (result.kind) {
+    case 'noContent':
+      return { kind: 'tracks', tracks: [] }
+    case 'ok':
+      return { kind: 'tracks', tracks: parseComingUp(result.json, limit) }
+    case 'rateLimited':
+      return { kind: 'rateLimited', retryAfterMs: result.retryAfterMs }
+    case 'error':
+      return { kind: 'error' }
+  }
+}
+
 export function parsePlayback(body: unknown, fetchedAt: number): PlaybackState {
   const data = body as CurrentlyPlayingBody
   const item = data.item
@@ -99,12 +164,7 @@ export function parsePlayback(body: unknown, fetchedAt: number): PlaybackState {
 
   return {
     status: data.is_playing ? 'playing' : 'paused',
-    track: {
-      title: item.name,
-      artist: item.artists.map((a) => a.name).join(', '),
-      albumArtUrl: largestImageUrl(item.album.images),
-      durationMs: item.duration_ms,
-    },
+    track: parseTrack(item),
     progressMs: data.progress_ms,
     fetchedAt,
   }
