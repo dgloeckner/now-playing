@@ -103,8 +103,12 @@
     justify-content: center;
     gap: 3vmin;
     overflow: hidden;
-    /* Extra bottom room so the progress bar isn't flush against Coming Up. */
-    padding: 4vmin 4vmin 8vmin;
+    /* Extra bottom room so the progress bar isn't flush against Coming Up;
+       top/side padding honors the safe area so the art and meta stay clear of
+       the status bar and rounded corners. The .wash backdrop ignores this
+       padding and still bleeds to the edges. */
+    padding: max(4vmin, env(safe-area-inset-top)) max(4vmin, env(safe-area-inset-right)) 8vmin
+      max(4vmin, env(safe-area-inset-left));
     /* Art is capped so a 2-line title + artist + progress always fit. */
     --size: min(42vh, 82vw);
   }

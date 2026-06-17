@@ -106,16 +106,21 @@
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 5vmin;
+    /* Keep content inside the iPad's safe area (status bar, home indicator,
+       rounded corners) even though the surface itself runs edge-to-edge. */
+    padding: max(5vmin, env(safe-area-inset-top)) max(5vmin, env(safe-area-inset-right))
+      max(5vmin, env(safe-area-inset-bottom)) max(5vmin, env(safe-area-inset-left));
   }
 
-  /* Connected: Now Playing fills the upper area, Coming Up sits below it. */
+  /* Connected: Now Playing fills the upper area, Coming Up sits below it.
+     The blurred backdrop bleeds to the edges; per-section padding keeps the
+     foreground clear of the safe-area insets. */
   .display--connected {
     position: relative;
     flex-direction: column;
     align-items: stretch;
     justify-content: stretch;
-    padding: 0 0 4vmin;
+    padding: 0 0 calc(4vmin + env(safe-area-inset-bottom));
   }
 
   /* Transparent overlay: tap (or Enter/Space) anywhere to cycle Display Mode. */
